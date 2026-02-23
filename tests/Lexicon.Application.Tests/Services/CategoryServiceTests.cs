@@ -44,9 +44,11 @@ public class CategoryServiceTests
         };
         _catRepo.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(list);
 
-        var result = await _svc.GetAllAsync();
+        var hasil = await _svc.GetAllAsync();
 
-        result.Should().HaveCount(2);
+        
+        hasil.Should().HaveCount(2);
+        _catRepo.Verify(r => r.GetAllAsync(default), Times.Once);
     }
 
     [Fact]
@@ -55,9 +57,9 @@ public class CategoryServiceTests
         var kat = BikinKategori("Dokumen Teknis");
         _catRepo.Setup(r => r.GetByIdAsync(kat.Id, It.IsAny<CancellationToken>())).ReturnsAsync(kat);
 
-        var result = await _svc.GetByIdAsync(kat.Id);
-        result.Should().NotBeNull();
-        result!.Name.Should().Be("Dokumen Teknis");
+        var hasil = await _svc.GetByIdAsync(kat.Id);
+        hasil.Should().NotBeNull();
+        hasil!.Name.Should().Be("Dokumen Teknis");
     }
 
     [Fact]
@@ -66,18 +68,20 @@ public class CategoryServiceTests
         var kat = BikinKategori("Panduan Kerja");
         _catRepo.Setup(r => r.GetBySlugAsync("panduan-kerja", default)).ReturnsAsync(kat);
 
-        var result = await _svc.GetBySlugAsync("panduan-kerja");
-        result.Should().NotBeNull();
+        var hasil = await _svc.GetBySlugAsync("panduan-kerja");
+        hasil.Should().NotBeNull();
     }
 
     [Fact]
     public async Task Should_ReturnNull_When_SlugNotFound()
     {
-        _catRepo.Setup(r => r.GetBySlugAsync("tidak-ada", default)).ReturnsAsync((Category?)null);
+        var slugNgawur = "tidak-ada-slug-begini-begitu";
+        _catRepo.Setup(r => r.GetBySlugAsync(slugNgawur, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Category?)null);
 
-        var result = await _svc.GetBySlugAsync("tidak-ada");
+        var hasil = await _svc.GetBySlugAsync(slugNgawur);
         
-        result.Should().BeNull();
+        hasil.Should().BeNull();
     }
 
     [Fact]
@@ -85,9 +89,9 @@ public class CategoryServiceTests
     {
         var dto = new CreateCategoryDto("Arsip Lama", "Dokumen lama perusahaan", null);
 
-        var result = await _svc.CreateAsync(dto);
+        var hasil = await _svc.CreateAsync(dto);
 
-        result.Name.Should().Be("Arsip Lama");
+        hasil.Name.Should().Be("Arsip Lama");
         _uow.Verify(x => x.SaveChangesAsync(default), Times.Once);
     }
 
@@ -98,9 +102,9 @@ public class CategoryServiceTests
         _catRepo.Setup(r => r.GetByIdAsync(existing.Id, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
 
         var dto = new UpdateCategoryDto("Nama Benar", "Deskripsi diperbaiki", null);
-        var result = await _svc.UpdateAsync(existing.Id, dto);
+        var hasil = await _svc.UpdateAsync(existing.Id, dto);
 
-        result!.Name.Should().Be("Nama Benar");
+        hasil!.Name.Should().Be("Nama Benar");
         _catRepo.Verify(r => r.UpdateAsync(It.IsAny<Category>(), It.IsAny<CancellationToken>()));
     }
 
@@ -117,10 +121,14 @@ public class CategoryServiceTests
     [Fact]
     public async Task Should_ReturnFalse_When_DeleteNotFound()
     {
-        _catRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Category?)null);
+        var nggakAdaId = Guid.NewGuid();
+        _catRepo.Setup(r => r.GetByIdAsync(nggakAdaId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(value: null);
 
-        var ok = await _svc.DeleteAsync(Guid.NewGuid());
-        ok.Should().BeFalse();
+        var statusHapus = await _svc.DeleteAsync(nggakAdaId);
+        
+        statusHapus.Should().BeFalse();
+        _uow.Verify(u => u.SaveChangesAsync(default), Times.Never);
     }
 
     [Fact]
@@ -143,12 +151,22 @@ public class CategoryServiceTests
     [Fact]
     public async Task Should_ThrowException_When_SaveChangesFails()
     {
-        var dto = new CreateCategoryDto("Kategori Error", "Deskripsi Error", null);
-        _catRepo.Setup(r => r.AddAsync(It.IsAny<Category>(), default)).ReturnsAsync(new Category());
-        _uow.Setup(u => u.SaveChangesAsync(default)).ThrowsAsync(new Exception("DB Timeout"));
+        var req = new CreateCategoryDto("Kategori Error", "Simulasi DB Error", null);
+        
+        _catRepo.Setup(r => r.AddAsync(It.IsAny<Category>(), default))
+                .ReturnsAsync(new Category());
+                
+        _uow.Setup(u => u.SaveChangesAsync(default))
+            .ThrowsAsync(new Exception("DB Timeout"));
 
-        Func<Task> act = async () => await _svc.CreateAsync(dto);
-
-        await act.Should().ThrowAsync<Exception>().WithMessage("DB Timeout");
+        try
+        {
+            await _svc.CreateAsync(req);
+            Assert.Fail("Harusnya melempar exception karena DB timeout.");
+        }
+        catch (Exception ex)
+        {
+            ex.Message.Should().Be("DB Timeout");
+        }
     }
 }

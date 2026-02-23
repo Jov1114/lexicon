@@ -54,12 +54,13 @@ public class AuthorServiceTests
     [Fact]
     public async Task Should_ReturnNull_When_NotFound()
     {
-        var randomId = Guid.NewGuid();
-        _authorRepo.Setup(r => r.GetByIdAsync(randomId, default)).ReturnsAsync((Author?)null);
+        var idNgawur = Guid.NewGuid();
+        _authorRepo.Setup(r => r.GetByIdAsync(idNgawur, It.IsAny<CancellationToken>()))
+                   .ReturnsAsync((Author?)null);
 
-        var hasil = await _authorSvc.GetByIdAsync(randomId);
+        var hasil = await _authorSvc.GetByIdAsync(idNgawur);
 
-        hasil.Should().BeNull();
+        Assert.Null(hasil);
     }
 
     [Fact]
@@ -67,10 +68,10 @@ public class AuthorServiceTests
     {
         var input = new CreateAuthorDto("Rina Sulis", "rina@kantor.id", "Staff Admin", "https://foto.id/rina.jpg");
 
-        var result = await _authorSvc.CreateAsync(input);
+        var hasil = await _authorSvc.CreateAsync(input);
 
-        result.Name.Should().Be("Rina Sulis");
-        result.Email.Should().Be("rina@kantor.id");
+        hasil.Name.Should().Be("Rina Sulis");
+        hasil.Email.Should().Be("rina@kantor.id");
 
         _authorRepo.Verify(r => r.AddAsync(It.Is<Author>(a => a.Email == "rina@kantor.id"), default));
         _uow.Verify(u => u.SaveChangesAsync(default));
@@ -84,22 +85,21 @@ public class AuthorServiceTests
         _authorRepo.Setup(r => r.GetByIdAsync(authorId, default)).ReturnsAsync(lama);
 
         var dto = new UpdateAuthorDto("Staff Promosi", "promosi@kantor.id", "Naik jabatan", "https://foto.id/promosi.jpg");
-        var result = await _authorSvc.UpdateAsync(authorId, dto);
+        var hasil = await _authorSvc.UpdateAsync(authorId, dto);
 
-        result!.Name.Should().Be("Staff Promosi");
+        hasil!.Name.Should().Be("Staff Promosi");
         _authorRepo.Verify(r => r.UpdateAsync(It.IsAny<Author>(), It.IsAny<CancellationToken>()));
     }
 
     [Fact]
     public async Task Should_ReturnNull_When_UpdateNotFound()
     {
-        var randomId = Guid.NewGuid();
-        _authorRepo.Setup(r => r.GetByIdAsync(randomId, default)).ReturnsAsync((Author?)null);
+        var uidRandom = Guid.NewGuid();
+        _authorRepo.Setup(r => r.GetByIdAsync(uidRandom, default)).ReturnsAsync((Author?)null);
 
-        var dto = new UpdateAuthorDto("Nama Bebas", "bebas@kantor.id", "Bebas", "link");
-        var result = await _authorSvc.UpdateAsync(randomId, dto);
+        var hasil = await _authorSvc.UpdateAsync(uidRandom, new UpdateAuthorDto("Nama Bebas", "bebas@kantor.id", "Bebas", "link"));
 
-        result.Should().BeNull();
+        hasil.Should().BeNull();
         _authorRepo.Verify(r => r.UpdateAsync(It.IsAny<Author>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -119,19 +119,22 @@ public class AuthorServiceTests
     {
         _authorRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Author?)null);
 
-        var gagal = await _authorSvc.DeleteAsync(Guid.NewGuid());
-        gagal.Should().BeFalse();
+        var statusGagal = await _authorSvc.DeleteAsync(Guid.NewGuid());
+        Assert.False(statusGagal);
     }
 
     [Fact]
     public async Task Should_ThrowException_When_SaveChangesFails()
     {
-        var input = new CreateAuthorDto("Error Kasus", "error@kantor.id", "Test", "link");
-        _authorRepo.Setup(r => r.AddAsync(It.IsAny<Author>(), default)).ReturnsAsync(new Author());
-        _uow.Setup(u => u.SaveChangesAsync(default)).ThrowsAsync(new Exception("Database connection lost"));
+        var payloadBaru = new CreateAuthorDto("Error Kasus", "error@kantor.id", "Test", "link");
+        
+        _authorRepo.Setup(r => r.AddAsync(It.IsAny<Author>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Author());
+            
+        _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("Database connection lost"));
 
-        Func<Task> act = async () => await _authorSvc.CreateAsync(input);
-
-        await act.Should().ThrowAsync<Exception>().WithMessage("Database connection lost");
+        var ex = await Assert.ThrowsAsync<Exception>(() => _authorSvc.CreateAsync(payloadBaru));
+        Assert.Equal("Database connection lost", ex.Message);
     }
 }
