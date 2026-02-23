@@ -97,6 +97,18 @@ public class TagServiceTests
     }
 
     [Fact]
+    public async Task Should_ReturnNull_When_UpdateNotFound()
+    {
+        var randomId = Guid.NewGuid();
+        _tagRepo.Setup(r => r.GetByIdAsync(randomId, default)).ReturnsAsync((Tag?)null);
+
+        var hasil = await _tagService.UpdateAsync(randomId, new UpdateTagDto("Nama Bebas"));
+
+        hasil.Should().BeNull();
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Should_DeleteTag_When_Found()
     {
         var tag = new Tag { Id = Guid.NewGuid(), Name = "Hapus Ini", Slug = "hapus-ini" };
@@ -106,5 +118,26 @@ public class TagServiceTests
 
         berhasil.Should().BeTrue();
         _tagRepo.Verify(r => r.DeleteAsync(tag, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Should_ReturnFalse_When_DeleteNotFound()
+    {
+        _tagRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Tag?)null);
+
+        var gagal = await _tagService.DeleteAsync(Guid.NewGuid());
+        gagal.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Should_ThrowException_When_SaveChangesFails()
+    {
+        var input = new CreateTagDto("Error Tag");
+        _tagRepo.Setup(r => r.AddAsync(It.IsAny<Tag>(), default)).ReturnsAsync(new Tag());
+        _uow.Setup(u => u.SaveChangesAsync(default)).ThrowsAsync(new Exception("Koneksi DB putus"));
+
+        Func<Task> act = async () => await _tagService.CreateAsync(input);
+
+        await act.Should().ThrowAsync<Exception>().WithMessage("Koneksi DB putus");
     }
 }

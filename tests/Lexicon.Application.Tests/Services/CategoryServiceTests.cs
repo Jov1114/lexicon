@@ -71,6 +71,16 @@ public class CategoryServiceTests
     }
 
     [Fact]
+    public async Task Should_ReturnNull_When_SlugNotFound()
+    {
+        _catRepo.Setup(r => r.GetBySlugAsync("tidak-ada", default)).ReturnsAsync((Category?)null);
+
+        var result = await _svc.GetBySlugAsync("tidak-ada");
+        
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Should_CreateCategory_When_ValidDto()
     {
         var dto = new CreateCategoryDto("Arsip Lama", "Dokumen lama perusahaan", null);
@@ -105,6 +115,15 @@ public class CategoryServiceTests
     }
 
     [Fact]
+    public async Task Should_ReturnFalse_When_DeleteNotFound()
+    {
+        _catRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Category?)null);
+
+        var ok = await _svc.DeleteAsync(Guid.NewGuid());
+        ok.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Should_ReturnHierarchy_When_TreeRequested()
     {
         var main = BikinKategori("Kantor Pusat");
@@ -119,5 +138,17 @@ public class CategoryServiceTests
         tree.Should().ContainSingle();
         tree.First().Children.Should().ContainSingle()
             .Which.Name.Should().Be("Cabang Surabaya");
+    }
+
+    [Fact]
+    public async Task Should_ThrowException_When_SaveChangesFails()
+    {
+        var dto = new CreateCategoryDto("Kategori Error", "Deskripsi Error", null);
+        _catRepo.Setup(r => r.AddAsync(It.IsAny<Category>(), default)).ReturnsAsync(new Category());
+        _uow.Setup(u => u.SaveChangesAsync(default)).ThrowsAsync(new Exception("DB Timeout"));
+
+        Func<Task> act = async () => await _svc.CreateAsync(dto);
+
+        await act.Should().ThrowAsync<Exception>().WithMessage("DB Timeout");
     }
 }

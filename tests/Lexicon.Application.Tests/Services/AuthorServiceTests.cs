@@ -52,6 +52,17 @@ public class AuthorServiceTests
     }
 
     [Fact]
+    public async Task Should_ReturnNull_When_NotFound()
+    {
+        var randomId = Guid.NewGuid();
+        _authorRepo.Setup(r => r.GetByIdAsync(randomId, default)).ReturnsAsync((Author?)null);
+
+        var hasil = await _authorSvc.GetByIdAsync(randomId);
+
+        hasil.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Should_CreateAuthor_When_ValidDto()
     {
         var input = new CreateAuthorDto("Rina Sulis", "rina@kantor.id", "Staff Admin", "https://foto.id/rina.jpg");
@@ -80,6 +91,19 @@ public class AuthorServiceTests
     }
 
     [Fact]
+    public async Task Should_ReturnNull_When_UpdateNotFound()
+    {
+        var randomId = Guid.NewGuid();
+        _authorRepo.Setup(r => r.GetByIdAsync(randomId, default)).ReturnsAsync((Author?)null);
+
+        var dto = new UpdateAuthorDto("Nama Bebas", "bebas@kantor.id", "Bebas", "link");
+        var result = await _authorSvc.UpdateAsync(randomId, dto);
+
+        result.Should().BeNull();
+        _authorRepo.Verify(r => r.UpdateAsync(It.IsAny<Author>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Should_DeleteAuthor_When_Found()
     {
         var authorId = Guid.NewGuid();
@@ -97,5 +121,17 @@ public class AuthorServiceTests
 
         var gagal = await _authorSvc.DeleteAsync(Guid.NewGuid());
         gagal.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Should_ThrowException_When_SaveChangesFails()
+    {
+        var input = new CreateAuthorDto("Error Kasus", "error@kantor.id", "Test", "link");
+        _authorRepo.Setup(r => r.AddAsync(It.IsAny<Author>(), default)).ReturnsAsync(new Author());
+        _uow.Setup(u => u.SaveChangesAsync(default)).ThrowsAsync(new Exception("Database connection lost"));
+
+        Func<Task> act = async () => await _authorSvc.CreateAsync(input);
+
+        await act.Should().ThrowAsync<Exception>().WithMessage("Database connection lost");
     }
 }
